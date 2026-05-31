@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'service/api_service.dart';
+import 'api_service.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});

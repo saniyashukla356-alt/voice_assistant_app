@@ -18,6 +18,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   late FlutterTts _tts;
   bool _isListening = false;
   bool _isProcessing = false;
+  bool _isSpeaking = false;
   String _text = "Tap the microphone to start speaking";
   String _lastFinalText = '';
 
@@ -68,10 +69,24 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     await _tts.setSpeechRate(0.55);
     await _tts.setPitch(1.05);
     await _tts.setVolume(1.0);
+
+    _tts.setStartHandler(() {
+      if (mounted) setState(() => _isSpeaking = true);
+    });
+    _tts.setCompletionHandler(() {
+      if (mounted) setState(() => _isSpeaking = false);
+    });
+    _tts.setCancelHandler(() {
+      if (mounted) setState(() => _isSpeaking = false);
+    });
+    _tts.setErrorHandler((msg) {
+      if (mounted) setState(() => _isSpeaking = false);
+    });
   }
 
   Future<void> _speak(String text) async {
     await _tts.stop();
+    if (mounted) setState(() => _isSpeaking = true);
     await _tts.speak(text);
   }
 
@@ -106,6 +121,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
     _lastFinalText = prompt;
     _isProcessing = true;
+    await _speech.stop();
 
     if (mounted) {
       setState(() {
@@ -134,6 +150,17 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   }
 
   void _listen() async {
+    if (_isSpeaking) {
+      await _tts.stop();
+      if (mounted) {
+        setState(() {
+          _isSpeaking = false;
+          _text = "Stopped speaking.";
+        });
+      }
+      return;
+    }
+
     if (!_isListening) {
       final hasPermission = await _requestMicPermission();
       if (!hasPermission) {
@@ -189,7 +216,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             }
           },
           listenOptions: stt.SpeechListenOptions(
-            pauseFor: const Duration(seconds: 5),
+            pauseFor: const Duration(seconds: 2),
           ),
           onSoundLevelChange: (level) {
             if (mounted && _isListening) {
@@ -314,7 +341,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                       painter: ExactImageOrbPainter(
                                         rotation: rotationFactor,
                                         voiceEnergy: _smoothSoundLevel,
-                                        isListening: _isListening,
+                                        isListening: _isListening || _isSpeaking,
                                       ),
                                     );
                                   },
@@ -350,9 +377,15 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        _isListening ? 'Listening...' : 'Tap Mic to Start',
+                        _isListening
+                            ? 'Listening...'
+                            : _isSpeaking
+                                ? 'Speaking...'
+                                : 'Tap Mic to Start',
                         style: TextStyle(
-                          color: _isListening ? glowPink : Colors.white60,
+                          color: _isListening || _isSpeaking
+                              ? glowPink
+                              : Colors.white60,
                           fontSize: 13.0,
                           fontWeight: FontWeight.w600,
                           letterSpacing: 0.5,
@@ -383,8 +416,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                           alpha: _isListening
                                               ? (0.45 * _pulseController.value)
                                               : 0.15),
-                                      blurRadius: _isListening ? 28 : 12,
-                                      spreadRadius: _isListening
+                                      blurRadius: _isListening || _isSpeaking ? 28 : 12,
+                                      spreadRadius: _isListening || _isSpeaking
                                           ? (6 * _pulseController.value)
                                           : 1,
                                     )
@@ -405,7 +438,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                       ),
                                     ),
                                     child: Icon(
-                                      _isListening
+                                      _isListening || _isSpeaking
                                           ? Icons.stop_rounded
                                           : Icons.mic_none_rounded,
                                       color: Colors.white,

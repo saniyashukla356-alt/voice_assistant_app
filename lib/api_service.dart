@@ -1,25 +1,18 @@
 import 'dart:convert';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
 class ApiService {
   ApiService({String? apiKey, String? model})
-      : apiKey = apiKey ??
-            const String.fromEnvironment(
-              'GEMINI_API_KEY',
-              defaultValue: '',
-            ),
-        model = model ??
-            const String.fromEnvironment(
-              'GEMINI_MODEL',
-              defaultValue: 'gemini-2.5-flash',
-            );
+      : apiKey = apiKey ?? dotenv.env['GEMINI_API_KEY'] ?? '',
+        model = model ?? dotenv.env['GEMINI_MODEL'] ?? 'gemini-2.5-flash';
 
   final String apiKey;
   final String model;
 
   Future<String> getResponse(String prompt) async {
     if (apiKey.isEmpty) {
-      return 'Missing API key. Set GEMINI_API_KEY via --dart-define.';
+      return 'Missing API key. Set GEMINI_API_KEY in .env.';
     }
 
     final url = Uri.parse(

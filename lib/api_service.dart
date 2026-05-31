@@ -2,11 +2,28 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class ApiService {
-  final String apiKey = "YOUR_GEMINI_API_KEY_HERE";
+  ApiService({String? apiKey, String? model})
+      : apiKey = apiKey ??
+            const String.fromEnvironment(
+              'GEMINI_API_KEY',
+              defaultValue: '',
+            ),
+        model = model ??
+            const String.fromEnvironment(
+              'GEMINI_MODEL',
+              defaultValue: 'gemini-2.5-flash',
+            );
+
+  final String apiKey;
+  final String model;
 
   Future<String> getResponse(String prompt) async {
+    if (apiKey.isEmpty) {
+      return 'Missing API key. Set GEMINI_API_KEY via --dart-define.';
+    }
+
     final url = Uri.parse(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$apiKey",
+      'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey',
     );
 
     try {

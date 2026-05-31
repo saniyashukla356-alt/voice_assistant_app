@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'home_page.dart'; // 👈 Check karna ye import sahi se ho
+import 'home_page.dart';
 
 void main() {
   runApp(const MyApp());
@@ -10,10 +10,10 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return const MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Vaani AI',
-      home: const HomePage(), // 👈 Yahan 'HomePage()' kar do!
+      home: HomePage(),
     );
   }
 }

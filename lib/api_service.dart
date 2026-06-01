@@ -5,7 +5,8 @@ import 'package:http/http.dart' as http;
 class ApiService {
   ApiService({String? apiKey, String? model})
       : apiKey = apiKey ?? dotenv.env['GEMINI_API_KEY'] ?? '',
-        model = model ?? dotenv.env['GEMINI_MODEL'] ?? 'gemini-2.5-flash';
+        model = model ?? dotenv.env['GEMINI_MODEL'] ?? 'gemini-1.5-flash-latest';
+2.5-flash';
 
   final String apiKey;
   final String model;

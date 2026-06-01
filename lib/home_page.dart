@@ -283,7 +283,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           SafeArea(
             child: Padding(
               padding:
-                  const EdgeInsets.symmetric(horizontal: 24.0, vertical: 12.0),
+              const EdgeInsets.symmetric(horizontal: 24.0, vertical: 12.0),
               child: Column(
                 children: [
                   Row(
@@ -380,8 +380,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                         _isListening
                             ? 'Listening...'
                             : _isSpeaking
-                                ? 'Speaking...'
-                                : 'Tap Mic to Start',
+                            ? 'Speaking...'
+                            : 'Tap Mic to Start',
                         style: TextStyle(
                           color: _isListening || _isSpeaking
                               ? glowPink

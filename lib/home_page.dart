@@ -12,13 +12,14 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
+class _HomePageState extends State<HomePage> with TickerProviderStateMixin, WidgetsBindingObserver {
   late stt.SpeechToText _speech;
   late ApiService _apiService;
   late FlutterTts _tts;
   bool _isListening = false;
   bool _isProcessing = false;
   bool _isSpeaking = false;
+  bool _isPaused = false;
   String _text = "Tap the microphone to start speaking";
   String _lastFinalText = '';
 
@@ -31,6 +32,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _speech = stt.SpeechToText();
     _apiService = ApiService();
     _tts = FlutterTts();
@@ -58,10 +60,24 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _tts.stop();
     _waveController.dispose();
     _pulseController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      _tts.stop();
+      if (mounted) {
+        setState(() {
+          _isSpeaking = false;
+          _isPaused = false;
+        });
+      }
+    }
   }
 
   Future<void> _initTts() async {
@@ -74,19 +90,39 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       if (mounted) setState(() => _isSpeaking = true);
     });
     _tts.setCompletionHandler(() {
-      if (mounted) setState(() => _isSpeaking = false);
+      if (mounted) {
+        setState(() {
+          _isSpeaking = false;
+          _isPaused = false;
+        });
+      }
     });
     _tts.setCancelHandler(() {
-      if (mounted) setState(() => _isSpeaking = false);
+      if (mounted) {
+        setState(() {
+          _isSpeaking = false;
+          _isPaused = false;
+        });
+      }
     });
     _tts.setErrorHandler((msg) {
-      if (mounted) setState(() => _isSpeaking = false);
+      if (mounted) {
+        setState(() {
+          _isSpeaking = false;
+          _isPaused = false;
+        });
+      }
     });
   }
 
   Future<void> _speak(String text) async {
     await _tts.stop();
-    if (mounted) setState(() => _isSpeaking = true);
+    if (mounted) {
+      setState(() {
+        _isSpeaking = true;
+        _isPaused = false;
+      });
+    }
     await _tts.speak(text);
   }
 
@@ -149,18 +185,27 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     }
   }
 
-  void _listen() async {
+  void _togglePauseResume() async {
     if (_isSpeaking) {
-      await _tts.stop();
+      await _tts.pause();
       if (mounted) {
         setState(() {
           _isSpeaking = false;
-          _text = "Stopped speaking.";
+          _isPaused = true;
         });
       }
-      return;
+    } else if (_isPaused) {
+      if (mounted) {
+        setState(() {
+          _isSpeaking = true;
+          _isPaused = false;
+        });
+      }
+      await _tts.speak(_sanitizeForSpeech(_text));
     }
+  }
 
+  void _listen() async {
     if (!_isListening) {
       final hasPermission = await _requestMicPermission();
       if (!hasPermission) {
@@ -380,10 +425,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                         _isListening
                             ? 'Listening...'
                             : _isSpeaking
-                            ? 'Speaking...'
-                            : 'Tap Mic to Start',
+                                ? 'Speaking...'
+                                : _isPaused
+                                    ? 'Paused'
+                                    : 'Tap Mic to Start',
                         style: TextStyle(
-                          color: _isListening || _isSpeaking
+                          color: _isListening || _isSpeaking || _isPaused
                               ? glowPink
                               : Colors.white60,
                           fontSize: 13.0,
@@ -394,61 +441,90 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                       const SizedBox(height: 24.0),
                       Padding(
                         padding: const EdgeInsets.only(bottom: 24.0),
-                        child: GestureDetector(
-                          onTap: _listen,
-                          child: AnimatedBuilder(
-                            animation: _pulseController,
-                            builder: (context, child) {
-                              return Container(
-                                height: 80,
-                                width: 80,
-                                padding: const EdgeInsets.all(3.0),
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  gradient: const LinearGradient(
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                    colors: [micOuterLight, micOuterDark],
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: glowPink.withValues(
-                                          alpha: _isListening
-                                              ? (0.45 * _pulseController.value)
-                                              : 0.15),
-                                      blurRadius: _isListening || _isSpeaking ? 28 : 12,
-                                      spreadRadius: _isListening || _isSpeaking
-                                          ? (6 * _pulseController.value)
-                                          : 1,
-                                    )
-                                  ],
-                                ),
-                                child: Container(
-                                  padding: const EdgeInsets.all(5.0),
-                                  decoration: const BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: bgSpaceDark,
-                                  ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            if (_isSpeaking || _isPaused)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 20.0),
+                                child: GestureDetector(
+                                  onTap: _togglePauseResume,
                                   child: Container(
-                                    decoration: const BoxDecoration(
+                                    height: 56,
+                                    width: 56,
+                                    decoration: BoxDecoration(
                                       shape: BoxShape.circle,
-                                      gradient: RadialGradient(
-                                        colors: [micInnerPink, micInnerPurple],
-                                        radius: 0.75,
-                                      ),
+                                      color: Colors.white.withValues(alpha: 0.1),
+                                      border: Border.all(
+                                          color: Colors.white.withValues(alpha: 0.2)),
                                     ),
                                     child: Icon(
-                                      _isListening || _isSpeaking
-                                          ? Icons.stop_rounded
-                                          : Icons.mic_none_rounded,
+                                      _isSpeaking
+                                          ? Icons.pause_rounded
+                                          : Icons.play_arrow_rounded,
                                       color: Colors.white,
-                                      size: 34.0,
+                                      size: 28.0,
                                     ),
                                   ),
                                 ),
-                              );
-                            },
-                          ),
+                              ),
+                            GestureDetector(
+                              onTap: _listen,
+                              child: AnimatedBuilder(
+                                animation: _pulseController,
+                                builder: (context, child) {
+                                  return Container(
+                                    height: 80,
+                                    width: 80,
+                                    padding: const EdgeInsets.all(3.0),
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      gradient: const LinearGradient(
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                        colors: [micOuterLight, micOuterDark],
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: glowPink.withValues(
+                                              alpha: _isListening
+                                                  ? (0.45 * _pulseController.value)
+                                                  : 0.15),
+                                          blurRadius: _isListening ? 28 : 12,
+                                          spreadRadius: _isListening
+                                              ? (6 * _pulseController.value)
+                                              : 1,
+                                        )
+                                      ],
+                                    ),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(5.0),
+                                      decoration: const BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: bgSpaceDark,
+                                      ),
+                                      child: Container(
+                                        decoration: const BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          gradient: RadialGradient(
+                                            colors: [micInnerPink, micInnerPurple],
+                                            radius: 0.75,
+                                          ),
+                                        ),
+                                        child: Icon(
+                                          _isListening
+                                              ? Icons.stop_rounded
+                                              : Icons.mic_none_rounded,
+                                          color: Colors.white,
+                                          size: 34.0,
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],

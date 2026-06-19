@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
+import 'dart:convert';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'api_service.dart';
+import 'reminder_service.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -11,7 +13,6 @@ class HomePage extends StatefulWidget {
   @override
   State<HomePage> createState() => _HomePageState();
 }
-
 class _HomePageState extends State<HomePage> with TickerProviderStateMixin, WidgetsBindingObserver {
   late stt.SpeechToText _speech;
   late ApiService _apiService;
@@ -20,7 +21,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
   bool _isProcessing = false;
   bool _isSpeaking = false;
   bool _isPaused = false;
-  String _text = "Tap the microphone to start speaking";
+  bool _isPassiveListening = false;
+  String _text = "Say 'Hey Vaani' or tap the mic";
   String _lastFinalText = '';
 
   late AnimationController _waveController;
@@ -34,6 +36,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _speech = stt.SpeechToText();
+    _initPassiveListening();
     _apiService = ApiService();
     _tts = FlutterTts();
     _initTts();
@@ -95,6 +98,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
           _isSpeaking = false;
           _isPaused = false;
         });
+        _startPassiveListening();
       }
     });
     _tts.setCancelHandler(() {
@@ -103,6 +107,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
           _isSpeaking = false;
           _isPaused = false;
         });
+        _startPassiveListening();
       }
     });
     _tts.setErrorHandler((msg) {
@@ -111,6 +116,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
           _isSpeaking = false;
           _isPaused = false;
         });
+        _startPassiveListening();
       }
     });
   }
@@ -157,6 +163,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
 
     _lastFinalText = prompt;
     _isProcessing = true;
+    _isPassiveListening = false;
     await _speech.stop();
 
     if (mounted) {
@@ -167,16 +174,46 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
 
     try {
       final response = await _apiService.getResponse(prompt);
+      
+      String displayText = response;
+      
+      // Check for reminder JSON
+      try {
+        if (response.contains('{"reminder":')) {
+          final jsonStart = response.indexOf('{"reminder":');
+          final jsonEnd = response.lastIndexOf('}') + 1;
+          final jsonStr = response.substring(jsonStart, jsonEnd);
+          final data = jsonDecode(jsonStr);
+          
+          final task = data['reminder']['task'];
+          final time = DateTime.parse(data['reminder']['time']);
+          
+          await ReminderService().scheduleReminder(
+            DateTime.now().millisecondsSinceEpoch ~/ 1000,
+            "Vaani AI Reminder",
+            task,
+            time,
+          );
+          
+          displayText = "${response.substring(0, jsonStart).trim()} ${response.substring(jsonEnd).trim()}";
+          if (displayText.trim().isEmpty) {
+            displayText = "OK, I've set a reminder for $task at ${time.hour}:${time.minute}.";
+          }
+        }
+      } catch (e) {
+        debugPrint("Error parsing reminder JSON: $e");
+      }
+
       if (mounted) {
         setState(() {
-          _text = response;
+          _text = displayText;
         });
       }
 
-      final speechText = _sanitizeForSpeech(response);
-      if (response.isNotEmpty &&
-          !response.startsWith('API Error') &&
-          !response.startsWith('Exception') &&
+      final speechText = _sanitizeForSpeech(displayText);
+      if (displayText.isNotEmpty &&
+          !displayText.startsWith('API Error') &&
+          !displayText.startsWith('Exception') &&
           speechText.isNotEmpty) {
         await _speak(speechText);
       }
@@ -185,6 +222,61 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
     }
   }
 
+  Future<void> _initPassiveListening() async {
+    final hasPermission = await _requestMicPermission();
+    if (!hasPermission) return;
+
+    bool available = await _speech.initialize(
+      onError: (error) {
+        if (mounted) {
+          setState(() {
+            _isPassiveListening = false;
+          });
+          // Attempt to restart after a delay
+          Future.delayed(const Duration(seconds: 2), () => _startPassiveListening());
+        }
+      },
+      onStatus: (status) {
+        if (status == 'done' || status == 'notListening' || status == 'stopped') {
+          if (mounted) {
+            setState(() => _isPassiveListening = false);
+            if (!_isListening && !_isProcessing && !_isSpeaking) {
+              // Give the engine a moment to breathe before restarting
+              Future.delayed(const Duration(milliseconds: 1000), () => _startPassiveListening());
+            }
+          }
+        }
+      },
+    );
+    if (available) {
+      _startPassiveListening();
+    }
+  }
+
+  void _startPassiveListening() async {
+    if (_isListening || _isProcessing || _isSpeaking || _isPassiveListening) return;
+
+    if (mounted) setState(() => _isPassiveListening = true);
+
+    await _speech.listen(
+      onResult: (val) async {
+        String recognized = val.recognizedWords.toLowerCase();
+        if (recognized.contains("hey vaani") ||
+            recognized.contains("hey vani") ||
+            recognized.contains("hi vaani") ||
+            recognized.contains("vani")) {
+          if (mounted) setState(() => _isPassiveListening = false);
+          await _speech.stop();
+          Future.delayed(const Duration(milliseconds: 400), () => _listen());
+        }
+      },
+      listenOptions: stt.SpeechListenOptions(
+        cancelOnError: true,
+        partialResults: true,
+        listenMode: stt.ListenMode.dictation,
+      ),
+    );
+  }
   void _togglePauseResume() async {
     if (_isSpeaking) {
       await _tts.pause();
@@ -206,6 +298,23 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
   }
 
   void _listen() async {
+    if (_isPassiveListening) {
+      _isPassiveListening = false;
+      await _speech.stop();
+      await Future.delayed(const Duration(milliseconds: 200));
+    }
+
+    if (_isSpeaking || _isPaused) {
+      await _tts.stop();
+      if (mounted) {
+        setState(() {
+          _isSpeaking = false;
+          _isPaused = false;
+          _text = "Listening...";
+        });
+      }
+    }
+
     if (!_isListening) {
       final hasPermission = await _requestMicPermission();
       if (!hasPermission) {

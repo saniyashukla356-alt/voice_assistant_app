@@ -19,6 +19,26 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
+subprojects {
+    project.evaluationDependsOn(":app")
+}
+
+subprojects {
+    tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+        val android = project.extensions.findByName("android") as? com.android.build.gradle.BaseExtension
+        val javaVersion = android?.compileOptions?.sourceCompatibility?.toString()
+        if (javaVersion != null) {
+            val target = when (javaVersion) {
+                "1.8", "8" -> org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_1_8
+                "11" -> org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11
+                "17" -> org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+                else -> org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+            }
+            compilerOptions.jvmTarget.set(target)
+        }
+    }
+}
+
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }

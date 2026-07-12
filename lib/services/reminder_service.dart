@@ -12,7 +12,8 @@ class ReminderService {
 
   Future<void> init() async {
     tz_data.initializeTimeZones();
-    final String timeZoneName = (await FlutterTimezone.getLocalTimezone()).identifier;
+    // flutter_timezone ^4.1.1 returns String directly
+    final String timeZoneName = await FlutterTimezone.getLocalTimezone();
     tz.setLocalLocation(tz.getLocation(timeZoneName));
     
     const AndroidInitializationSettings androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -37,7 +38,6 @@ class ReminderService {
         ),
       ),
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
     );
   }
 }

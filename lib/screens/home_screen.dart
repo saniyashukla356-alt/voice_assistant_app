@@ -4,16 +4,19 @@ import 'dart:convert';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'api_service.dart';
-import 'reminder_service.dart';
-
-class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+import '../services/api_service.dart';
+import '../services/reminder_service.dart';
+import '../widgets/orb_painter.dart';
+import '../widgets/voice_controls.dart';
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
 
   @override
-  State<HomePage> createState() => _HomePageState();
+  State<HomeScreen> createState() => _HomeScreenState();
 }
-class _HomePageState extends State<HomePage> with TickerProviderStateMixin, WidgetsBindingObserver {
+
+class _HomeScreenState extends State<HomeScreen>
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   late stt.SpeechToText _speech;
   late ApiService _apiService;
   late FlutterTts _tts;
@@ -54,8 +57,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
     _waveController.addListener(() {
       if (mounted && _isListening) {
         setState(() {
-          _smoothSoundLevel = _smoothSoundLevel +
-              (_targetSoundLevel - _smoothSoundLevel) * 0.10;
+          _smoothSoundLevel =
+              _smoothSoundLevel + (_targetSoundLevel - _smoothSoundLevel) * 0.10;
         });
       }
     });
@@ -72,7 +75,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
       _tts.stop();
       if (mounted) {
         setState(() {
@@ -156,93 +160,87 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
       }
       return;
     }
-
     if (_isProcessing || prompt == _lastFinalText) {
       return;
     }
-
     _lastFinalText = prompt;
     _isProcessing = true;
     _isPassiveListening = false;
     await _speech.stop();
-
     if (mounted) {
       setState(() {
         _text = 'Thinking...';
       });
     }
-
     try {
       final response = await _apiService.getResponse(prompt);
-      
       String displayText = response;
-      
-      // Check for reminder JSON
       try {
         if (response.contains('{"reminder":')) {
           final jsonStart = response.indexOf('{"reminder":');
           final jsonEnd = response.lastIndexOf('}') + 1;
           final jsonStr = response.substring(jsonStart, jsonEnd);
           final data = jsonDecode(jsonStr);
-          
+
           final task = data['reminder']['task'];
           final time = DateTime.parse(data['reminder']['time']);
-          
+
           await ReminderService().scheduleReminder(
             DateTime.now().millisecondsSinceEpoch ~/ 1000,
             "Vaani AI Reminder",
             task,
             time,
           );
-          
-          displayText = "${response.substring(0, jsonStart).trim()} ${response.substring(jsonEnd).trim()}";
+          displayText =
+              "${response.substring(0, jsonStart).trim()} ${response.substring(jsonEnd).trim()}";
           if (displayText.trim().isEmpty) {
-            displayText = "OK, I've set a reminder for $task at ${time.hour}:${time.minute}.";
+            displayText =
+                "OK, I've set a reminder for $task at ${time.hour}:${time.minute}.";
           }
         }
       } catch (e) {
         debugPrint("Error parsing reminder JSON: $e");
       }
-
       if (mounted) {
         setState(() {
           _text = displayText;
         });
       }
-
       final speechText = _sanitizeForSpeech(displayText);
       if (displayText.isNotEmpty &&
           !displayText.startsWith('API Error') &&
           !displayText.startsWith('Exception') &&
           speechText.isNotEmpty) {
         await _speak(speechText);
+      } else {
+        _startPassiveListening();
       }
     } finally {
       _isProcessing = false;
     }
-  }
-
-  Future<void> _initPassiveListening() async {
+  } Future<void> _initPassiveListening() async {
     final hasPermission = await _requestMicPermission();
     if (!hasPermission) return;
 
     bool available = await _speech.initialize(
       onError: (error) {
+        debugPrint("Speech Error: ${error.errorMsg}");
         if (mounted) {
-          setState(() {
-            _isPassiveListening = false;
-          });
-          // Attempt to restart after a delay
-          Future.delayed(const Duration(seconds: 2), () => _startPassiveListening());
+          setState(() => _isPassiveListening = false);
+          Future.delayed(
+              const Duration(seconds: 1), () => _startPassiveListening());
         }
       },
       onStatus: (status) {
-        if (status == 'done' || status == 'notListening' || status == 'stopped') {
+        debugPrint("Speech Status: $status");
+        if (status == 'done' ||
+            status == 'notListening' ||
+            status == 'stopped') {
           if (mounted) {
             setState(() => _isPassiveListening = false);
             if (!_isListening && !_isProcessing && !_isSpeaking) {
-              // Give the engine a moment to breathe before restarting
-              Future.delayed(const Duration(milliseconds: 1000), () => _startPassiveListening());
+              Future.delayed(const Duration(milliseconds: 1000),
+                  () => _startPassiveListening());
             }
           }
         }
@@ -251,23 +249,22 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
     if (available) {
       _startPassiveListening();
     }
-  }
-
-  void _startPassiveListening() async {
-    if (_isListening || _isProcessing || _isSpeaking || _isPassiveListening) return;
-
+  }  void _startPassiveListening() async {
+    if (_isListening || _isProcessing || _isSpeaking || _isPassiveListening) {
+      return;
+    }
     if (mounted) setState(() => _isPassiveListening = true);
-
     await _speech.listen(
       onResult: (val) async {
         String recognized = val.recognizedWords.toLowerCase();
         if (recognized.contains("hey vaani") ||
             recognized.contains("hey vani") ||
             recognized.contains("hi vaani") ||
+            recognized.contains("hello vaani") ||
             recognized.contains("vani")) {
           if (mounted) setState(() => _isPassiveListening = false);
           await _speech.stop();
-          Future.delayed(const Duration(milliseconds: 400), () => _listen());
+          Future.delayed(const Duration(milliseconds: 300), () => _listen());
         }
       },
       listenOptions: stt.SpeechListenOptions(
@@ -296,14 +293,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
       await _tts.speak(_sanitizeForSpeech(_text));
     }
   }
-
   void _listen() async {
     if (_isPassiveListening) {
       _isPassiveListening = false;
       await _speech.stop();
       await Future.delayed(const Duration(milliseconds: 200));
     }
-
     if (_isSpeaking || _isPaused) {
       await _tts.stop();
       if (mounted) {
@@ -314,7 +309,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
         });
       }
     }
-
     if (!_isListening) {
       final hasPermission = await _requestMicPermission();
       if (!hasPermission) {
@@ -325,7 +319,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
         }
         return;
       }
-
       bool available = await _speech.initialize(
         onStatus: (status) {
           if (status == 'done' ||
@@ -350,10 +343,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
           }
         },
       );
-
       if (available) {
         setState(() => _isListening = true);
-
         _speech.listen(
           onResult: (val) {
             if (mounted) {
@@ -364,7 +355,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
                 }
               });
             }
-
             if (val.finalResult) {
               _handleFinalResult(val.recognizedWords);
             }
@@ -390,18 +380,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
       await _speech.stop();
     }
   }
-
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
-
     const Color bgSpaceDark = Color(0xFF0D0C12);
     const Color gradientTop = Color(0xFF220F35);
     const Color glowPink = Color(0xFFFF1E7C);
-    const Color micOuterLight = Color(0xFFE5B0E2);
-    const Color micOuterDark = Color(0xFF9000D0);
-    const Color micInnerPink = Color(0xFFFF90B1);
-    const Color micInnerPurple = Color(0xFF7A368F);
 
     return Scaffold(
       backgroundColor: bgSpaceDark,
@@ -437,7 +421,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
           SafeArea(
             child: Padding(
               padding:
-              const EdgeInsets.symmetric(horizontal: 24.0, vertical: 12.0),
+                  const EdgeInsets.symmetric(horizontal: 24.0, vertical: 12.0),
               child: Column(
                 children: [
                   Row(
@@ -495,7 +479,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
                                       painter: ExactImageOrbPainter(
                                         rotation: rotationFactor,
                                         voiceEnergy: _smoothSoundLevel,
-                                        isListening: _isListening || _isSpeaking,
+                                        isListening:
+                                            _isListening || _isSpeaking,
                                       ),
                                     );
                                   },
@@ -527,116 +512,13 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
                       },
                     ),
                   ),
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        _isListening
-                            ? 'Listening...'
-                            : _isSpeaking
-                                ? 'Speaking...'
-                                : _isPaused
-                                    ? 'Paused'
-                                    : 'Tap Mic to Start',
-                        style: TextStyle(
-                          color: _isListening || _isSpeaking || _isPaused
-                              ? glowPink
-                              : Colors.white60,
-                          fontSize: 13.0,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      const SizedBox(height: 24.0),
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 24.0),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            if (_isSpeaking || _isPaused)
-                              Padding(
-                                padding: const EdgeInsets.only(right: 20.0),
-                                child: GestureDetector(
-                                  onTap: _togglePauseResume,
-                                  child: Container(
-                                    height: 56,
-                                    width: 56,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: Colors.white.withValues(alpha: 0.1),
-                                      border: Border.all(
-                                          color: Colors.white.withValues(alpha: 0.2)),
-                                    ),
-                                    child: Icon(
-                                      _isSpeaking
-                                          ? Icons.pause_rounded
-                                          : Icons.play_arrow_rounded,
-                                      color: Colors.white,
-                                      size: 28.0,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            GestureDetector(
-                              onTap: _listen,
-                              child: AnimatedBuilder(
-                                animation: _pulseController,
-                                builder: (context, child) {
-                                  return Container(
-                                    height: 80,
-                                    width: 80,
-                                    padding: const EdgeInsets.all(3.0),
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      gradient: const LinearGradient(
-                                        begin: Alignment.topLeft,
-                                        end: Alignment.bottomRight,
-                                        colors: [micOuterLight, micOuterDark],
-                                      ),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: glowPink.withValues(
-                                              alpha: _isListening
-                                                  ? (0.45 * _pulseController.value)
-                                                  : 0.15),
-                                          blurRadius: _isListening ? 28 : 12,
-                                          spreadRadius: _isListening
-                                              ? (6 * _pulseController.value)
-                                              : 1,
-                                        )
-                                      ],
-                                    ),
-                                    child: Container(
-                                      padding: const EdgeInsets.all(5.0),
-                                      decoration: const BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color: bgSpaceDark,
-                                      ),
-                                      child: Container(
-                                        decoration: const BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          gradient: RadialGradient(
-                                            colors: [micInnerPink, micInnerPurple],
-                                            radius: 0.75,
-                                          ),
-                                        ),
-                                        child: Icon(
-                                          _isListening
-                                              ? Icons.stop_rounded
-                                              : Icons.mic_none_rounded,
-                                          color: Colors.white,
-                                          size: 34.0,
-                                        ),
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                  VoiceControls(
+                    isListening: _isListening,
+                    isSpeaking: _isSpeaking,
+                    isPaused: _isPaused,
+                    pulseController: _pulseController,
+                    onTogglePauseResume: _togglePauseResume,
+                    onListen: _listen,
                   ),
                 ],
               ),
@@ -645,74 +527,5 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
         ],
       ),
     );
-  }
-}
-
-class ExactImageOrbPainter extends CustomPainter {
-  final double rotation;
-  final double voiceEnergy;
-  final bool isListening;
-
-  ExactImageOrbPainter({
-    required this.rotation,
-    required this.voiceEnergy,
-    required this.isListening,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final coreRadius = size.width * 0.32;
-
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.3;
-
-    int ribbonLayers = 65;
-
-    double organicAmplitude = isListening ? (4.5 + (voiceEnergy * 1.6)) : 4.0;
-
-    for (int i = 0; i < ribbonLayers; i++) {
-      final double progress = i / ribbonLayers;
-
-      paint.color = Color.lerp(
-        const Color(0xFFFF499E).withValues(alpha: 0.85),
-        const Color(0xFF8A2BE2).withValues(alpha: 0.15),
-        progress,
-      )!;
-
-      final Path layerPath = Path();
-
-      for (int step = 0; step <= 120; step++) {
-        final double radialAngle = (step / 120) * 2 * math.pi;
-
-        double dynamicWaveform = math.sin(radialAngle * 5 + rotation) *
-            math.cos(radialAngle * 3 - (progress * math.pi));
-
-        if (voiceEnergy > 1.5) {
-          dynamicWaveform +=
-              0.20 * math.sin(radialAngle * 10 + (rotation * 1.5));
-        }
-
-        double finalRadius =
-            (coreRadius * progress) + (dynamicWaveform * organicAmplitude);
-        double x = center.dx + finalRadius * math.cos(radialAngle);
-        double y = center.dy + finalRadius * math.sin(radialAngle);
-
-        if (step == 0) {
-          layerPath.moveTo(x, y);
-        } else {
-          layerPath.lineTo(x, y);
-        }
-      }
-      canvas.drawPath(layerPath, paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant ExactImageOrbPainter oldDelegate) {
-    return oldDelegate.rotation != rotation ||
-        oldDelegate.voiceEnergy != voiceEnergy ||
-        oldDelegate.isListening != isListening;
   }
 }

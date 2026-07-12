@@ -20,10 +20,6 @@ subprojects {
 }
 
 subprojects {
-    project.evaluationDependsOn(":app")
-}
-
-subprojects {
     tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
         val android = project.extensions.findByName("android") as? com.android.build.gradle.BaseExtension
         val javaVersion = android?.compileOptions?.sourceCompatibility?.toString()

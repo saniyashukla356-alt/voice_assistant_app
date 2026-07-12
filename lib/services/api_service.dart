@@ -4,8 +4,8 @@ import 'package:http/http.dart' as http;
 
 class ApiService {
   ApiService({String? apiKey, String? model})
-      : apiKey = apiKey ?? dotenv.env['GEMINI_API_KEY'] ?? '',
-        model = model ?? dotenv.env['GEMINI_MODEL'] ?? 'gemini-1.5-flash';
+      : apiKey = (apiKey ?? dotenv.env['GEMINI_API_KEY'] ?? '').trim(),
+        model = (model ?? dotenv.env['GEMINI_MODEL'] ?? 'gemini-2.5-flash').trim();
 
   final String apiKey;
   final String model;
@@ -26,22 +26,15 @@ class ApiService {
           "Content-Type": "application/json",
         },
         body: jsonEncode({
-          "system_instruction": {
-            "parts": [
-              {
-                "text":
-                    "Your name is Vaani. You are Vaani AI, a highly capable and friendly voice assistant. Whenever someone asks who you are or what your name is, always respond that you are Vaani AI. Keep your responses short, helpful, and optimized for text-to-speech. \n\n"
-                    "If the user asks to set a reminder, extract the task and the time. "
-                    "Respond with a JSON block in this format: {\"reminder\": {\"task\": \"...\", \"time\": \"ISO_8601_TIMESTAMP\"}}. "
-                    "Current time: ${DateTime.now().toIso8601String()}. "
-                    "Always confirm the reminder to the user in plain text as well."
-              }
-            ]
-          },
           "contents": [
             {
               "parts": [
-                {"text": prompt}
+                {
+                  "text": "SYSTEM: Your name is Vaani AI. You are a helpful voice assistant. "
+                      "If I ask for a reminder, respond with a JSON block: {\"reminder\": {\"task\": \"...\", \"time\": \"ISO_8601\"}}. "
+                      "Current time is ${DateTime.now().toIso8601String()}. "
+                      "\n\nUSER: $prompt"
+                }
               ]
             }
           ]

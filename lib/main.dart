@@ -1,24 +1,33 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'home_page.dart';
-import 'reminder_service.dart';
+import 'screens/splash_screen.dart';
+import 'services/reminder_service.dart';
 
-Future<void> main() async {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await ReminderService().init();
+  
+  // Load environment variables
   await dotenv.load(fileName: '.env', isOptional: true);
-  runApp(const MyApp());
+  
+  // Initialize notification service
+  await ReminderService().init();
+  
+  runApp(const VaaniApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class VaaniApp extends StatelessWidget {
+  const VaaniApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
+    return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Vaani AI',
-      home: HomePage(),
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+        useMaterial3: true,
+      ),
+      home: const SplashScreen(),
     );
   }
 }

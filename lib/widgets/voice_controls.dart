@@ -27,6 +27,8 @@ class VoiceControls extends StatelessWidget {
     const Color micInnerPurple = Color(0xFF7A368F);
     const Color bgSpaceDark = Color(0xFF0D0C12);
 
+    final bool isPlaybackActive = isSpeaking || isPaused;
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -53,30 +55,30 @@ class VoiceControls extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              if (isSpeaking || isPaused)
-                Padding(
-                  padding: const EdgeInsets.only(right: 20.0),
-                  child: GestureDetector(
-                    onTap: onTogglePauseResume,
-                    child: Container(
-                      height: 56,
-                      width: 56,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.white.withValues(alpha: 0.1),
-                        border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.2)),
+              // Pause/Resume button always besides microphone
+              GestureDetector(
+                onTap: isPlaybackActive ? onTogglePauseResume : null,
+                child: Opacity(
+                  opacity: isPlaybackActive ? 1.0 : 0.3,
+                  child: Container(
+                    height: 56,
+                    width: 56,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: 0.1),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.2),
                       ),
-                      child: Icon(
-                        isSpeaking
-                            ? Icons.pause_rounded
-                            : Icons.play_arrow_rounded,
-                        color: Colors.white,
-                        size: 28.0,
-                      ),
+                    ),
+                    child: Icon(
+                      isSpeaking ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                      color: Colors.white,
+                      size: 28.0,
                     ),
                   ),
                 ),
+              ),
+              const SizedBox(width: 20.0),
               GestureDetector(
                 onTap: onListen,
                 child: AnimatedBuilder(

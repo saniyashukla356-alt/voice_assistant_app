@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
-import 'dart:convert';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
-import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import '../services/api_service.dart';
-import '../services/reminder_service.dart';
+import '../services/alarm_service.dart';
+import '../services/speech_service.dart';
 import '../widgets/orb_painter.dart';
 import '../widgets/voice_controls.dart';
+import '../models/alarm_model.dart';
+import '../services/voice_command_service.dart';
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -17,7 +19,9 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen>
     with TickerProviderStateMixin, WidgetsBindingObserver {
-  late stt.SpeechToText _speech;
+  final SpeechService _speechService = SpeechService();
+  final AlarmService _alarmService = AlarmService();
+  final VoiceCommandService _voiceCommandService = VoiceCommandService();
   late ApiService _apiService;
   late FlutterTts _tts;
   bool _isListening = false;
@@ -38,11 +42,10 @@ class _HomeScreenState extends State<HomeScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _speech = stt.SpeechToText();
-    _initPassiveListening();
     _apiService = ApiService();
     _tts = FlutterTts();
     _initTts();
+    _initPassiveListening();
 
     _waveController = AnimationController(
       vsync: this,
@@ -55,7 +58,7 @@ class _HomeScreenState extends State<HomeScreen>
     )..repeat(reverse: true);
 
     _waveController.addListener(() {
-      if (mounted && _isListening) {
+      if (mounted && (_isListening || _isPassiveListening)) {
         setState(() {
           _smoothSoundLevel =
               _smoothSoundLevel + (_targetSoundLevel - _smoothSoundLevel) * 0.10;
@@ -144,87 +147,82 @@ class _HomeScreenState extends State<HomeScreen>
         .trim();
     return stripped;
   }
-
-  Future<bool> _requestMicPermission() async {
-    final status = await Permission.microphone.request();
-    return status.isGranted;
-  }
-
   Future<void> _handleFinalResult(String recognizedText) async {
     final prompt = recognizedText.trim();
+
     if (prompt.isEmpty) {
-      if (mounted) {
-        setState(() {
-          _text = "I didn't catch that. Try again.";
-        });
-      }
       return;
     }
+
     if (_isProcessing || prompt == _lastFinalText) {
       return;
     }
+
     _lastFinalText = prompt;
     _isProcessing = true;
     _isPassiveListening = false;
-    await _speech.stop();
+    _isListening = false;
+
+    await _speechService.stop();
+
+    // ---------- Alarm ----------
+    if (_voiceCommandService.isAlarmCommand(prompt)) {
+      final alarm = _voiceCommandService.parseAlarm(prompt);
+
+      if (alarm != null) {
+        await _alarmService.setAlarm(alarm: alarm);
+
+        final reply =
+            "Okay. Your alarm has been set for ${alarm.dateTime.hour}:${alarm.dateTime.minute.toString().padLeft(2, '0')} for ${alarm.task}.";
+
+        if (mounted) {
+          setState(() {
+            _text = reply;
+          });
+        }
+
+        await _speak(reply);
+
+        _isProcessing = false;
+
+        return;
+      }
+    }
+
+    // ---------- Gemini ----------
     if (mounted) {
       setState(() {
-        _text = 'Thinking...';
+        _text = "Thinking...";
       });
     }
+
     try {
       final response = await _apiService.getResponse(prompt);
-      String displayText = response;
-      try {
-        if (response.contains('{"reminder":')) {
-          final jsonStart = response.indexOf('{"reminder":');
-          final jsonEnd = response.lastIndexOf('}') + 1;
-          final jsonStr = response.substring(jsonStart, jsonEnd);
-          final data = jsonDecode(jsonStr);
 
-          final task = data['reminder']['task'];
-          final time = DateTime.parse(data['reminder']['time']);
-
-          await ReminderService().scheduleReminder(
-            DateTime.now().millisecondsSinceEpoch ~/ 1000,
-            "Vaani AI Reminder",
-            task,
-            time,
-          );
-          displayText =
-              "${response.substring(0, jsonStart).trim()} ${response.substring(jsonEnd).trim()}";
-          if (displayText.trim().isEmpty) {
-            displayText =
-                "OK, I've set a reminder for $task at ${time.hour}:${time.minute}.";
-          }
-        }
-      } catch (e) {
-        debugPrint("Error parsing reminder JSON: $e");
-      }
       if (mounted) {
         setState(() {
-          _text = displayText;
+          _text = response;
         });
       }
-      final speechText = _sanitizeForSpeech(displayText);
-      if (displayText.isNotEmpty &&
-          !displayText.startsWith('API Error') &&
-          !displayText.startsWith('Exception') &&
-          speechText.isNotEmpty) {
-        await _speak(speechText);
-      } else {
-        _startPassiveListening();
-      }
+
+      await _speak(_sanitizeForSpeech(response));
     } finally {
-      _isProcessing = false;
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+        });
+      }
     }
-  } Future<void> _initPassiveListening() async {
-    final hasPermission = await _requestMicPermission();
+  }
+
+
+  Future<void> _initPassiveListening() async {
+    final hasPermission = await _speechService.requestMicPermission();
     if (!hasPermission) return;
 
-    bool available = await _speech.initialize(
+    bool available = await _speechService.initialize(
       onError: (error) {
-        debugPrint("Speech Error: ${error.errorMsg}");
+        debugPrint("Speech Error: $error");
         if (mounted) {
           setState(() => _isPassiveListening = false);
           Future.delayed(
@@ -249,12 +247,14 @@ class _HomeScreenState extends State<HomeScreen>
     if (available) {
       _startPassiveListening();
     }
-  }  void _startPassiveListening() async {
+  }
+
+  void _startPassiveListening() async {
     if (_isListening || _isProcessing || _isSpeaking || _isPassiveListening) {
       return;
     }
     if (mounted) setState(() => _isPassiveListening = true);
-    await _speech.listen(
+    await _speechService.startListening(
       onResult: (val) async {
         String recognized = val.recognizedWords.toLowerCase();
         if (recognized.contains("hey vaani") ||
@@ -263,8 +263,15 @@ class _HomeScreenState extends State<HomeScreen>
             recognized.contains("hello vaani") ||
             recognized.contains("vani")) {
           if (mounted) setState(() => _isPassiveListening = false);
-          await _speech.stop();
+          await _speechService.stop();
           Future.delayed(const Duration(milliseconds: 300), () => _listen());
+        }
+      },
+      onSoundLevelChange: (level) {
+        if (mounted && _isPassiveListening) {
+          setState(() {
+            _targetSoundLevel = level.clamp(0.0, 10.0);
+          });
         }
       },
       listenOptions: stt.SpeechListenOptions(
@@ -274,6 +281,7 @@ class _HomeScreenState extends State<HomeScreen>
       ),
     );
   }
+
   void _togglePauseResume() async {
     if (_isSpeaking) {
       await _tts.pause();
@@ -293,12 +301,14 @@ class _HomeScreenState extends State<HomeScreen>
       await _tts.speak(_sanitizeForSpeech(_text));
     }
   }
+
   void _listen() async {
     if (_isPassiveListening) {
       _isPassiveListening = false;
-      await _speech.stop();
+      await _speechService.stop();
       await Future.delayed(const Duration(milliseconds: 200));
     }
+
     if (_isSpeaking || _isPaused) {
       await _tts.stop();
       if (mounted) {
@@ -309,8 +319,9 @@ class _HomeScreenState extends State<HomeScreen>
         });
       }
     }
+
     if (!_isListening) {
-      final hasPermission = await _requestMicPermission();
+      final hasPermission = await _speechService.requestMicPermission();
       if (!hasPermission) {
         if (mounted) {
           setState(() {
@@ -319,7 +330,8 @@ class _HomeScreenState extends State<HomeScreen>
         }
         return;
       }
-      bool available = await _speech.initialize(
+
+      bool available = await _speechService.initialize(
         onStatus: (status) {
           if (status == 'done' ||
               status == 'notListening' ||
@@ -343,9 +355,10 @@ class _HomeScreenState extends State<HomeScreen>
           }
         },
       );
+
       if (available) {
         setState(() => _isListening = true);
-        _speech.listen(
+        await _speechService.startListening(
           onResult: (val) {
             if (mounted) {
               setState(() {
@@ -377,9 +390,10 @@ class _HomeScreenState extends State<HomeScreen>
         _targetSoundLevel = 0.0;
         _smoothSoundLevel = 0.0;
       });
-      await _speech.stop();
+      await _speechService.stop();
     }
   }
+
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
@@ -480,7 +494,7 @@ class _HomeScreenState extends State<HomeScreen>
                                         rotation: rotationFactor,
                                         voiceEnergy: _smoothSoundLevel,
                                         isListening:
-                                            _isListening || _isSpeaking,
+                                            _isListening || _isSpeaking || _isPassiveListening,
                                       ),
                                     );
                                   },

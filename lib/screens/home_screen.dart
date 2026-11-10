@@ -7,9 +7,8 @@ import '../services/alarm_service.dart';
 import '../services/speech_service.dart';
 import '../widgets/orb_painter.dart';
 import '../widgets/voice_controls.dart';
-import '../models/alarm_model.dart';
 import '../services/voice_command_service.dart';
-
+import '../models/chat_message.dart';
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -20,7 +19,6 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen>
     with TickerProviderStateMixin, WidgetsBindingObserver {
   final SpeechService _speechService = SpeechService();
-  final AlarmService _alarmService = AlarmService();
   final VoiceCommandService _voiceCommandService = VoiceCommandService();
   late ApiService _apiService;
   late FlutterTts _tts;
@@ -31,7 +29,8 @@ class _HomeScreenState extends State<HomeScreen>
   bool _isPassiveListening = false;
   String _text = "Say 'Hey Vaani' or tap the mic";
   String _lastFinalText = '';
-
+  final List<ChatMessage> _messages = [];
+  final ScrollController _chatController = ScrollController();
   late AnimationController _waveController;
   late AnimationController _pulseController;
 
@@ -42,8 +41,10 @@ class _HomeScreenState extends State<HomeScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+
     _apiService = ApiService();
     _tts = FlutterTts();
+
     _initTts();
     _initPassiveListening();
 
@@ -61,12 +62,12 @@ class _HomeScreenState extends State<HomeScreen>
       if (mounted && (_isListening || _isPassiveListening)) {
         setState(() {
           _smoothSoundLevel =
-              _smoothSoundLevel + (_targetSoundLevel - _smoothSoundLevel) * 0.10;
+              _smoothSoundLevel +
+                  (_targetSoundLevel - _smoothSoundLevel) * 0.10;
         });
       }
     });
   }
-
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
@@ -75,7 +76,17 @@ class _HomeScreenState extends State<HomeScreen>
     _pulseController.dispose();
     super.dispose();
   }
-
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_chatController.hasClients) {
+        _chatController.animateTo(
+          _chatController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused ||
@@ -97,34 +108,39 @@ class _HomeScreenState extends State<HomeScreen>
     await _tts.setVolume(1.0);
 
     _tts.setStartHandler(() {
-      if (mounted) setState(() => _isSpeaking = true);
+      if (mounted) {
+        setState(() {
+          _isSpeaking = true;
+        });
+      }
     });
+
     _tts.setCompletionHandler(() {
       if (mounted) {
         setState(() {
           _isSpeaking = false;
           _isPaused = false;
         });
-        _startPassiveListening();
       }
     });
+
     _tts.setCancelHandler(() {
       if (mounted) {
         setState(() {
           _isSpeaking = false;
           _isPaused = false;
         });
-        _startPassiveListening();
       }
     });
+
     _tts.setErrorHandler((msg) {
       if (mounted) {
         setState(() {
           _isSpeaking = false;
           _isPaused = false;
         });
-        _startPassiveListening();
       }
+      debugPrint("TTS Error: $msg");
     });
   }
 
@@ -147,8 +163,19 @@ class _HomeScreenState extends State<HomeScreen>
         .trim();
     return stripped;
   }
+
   Future<void> _handleFinalResult(String recognizedText) async {
     final prompt = recognizedText.trim();
+    if (mounted) {
+      setState(() {
+        _messages.add(
+          ChatMessage(
+            message: prompt,
+            isUser: true,
+          ),
+        );
+      });
+    }
 
     if (prompt.isEmpty) {
       return;
@@ -164,13 +191,13 @@ class _HomeScreenState extends State<HomeScreen>
     _isListening = false;
 
     await _speechService.stop();
+// ---------- Alarm ----------
 
-    // ---------- Alarm ----------
     if (_voiceCommandService.isAlarmCommand(prompt)) {
       final alarm = _voiceCommandService.parseAlarm(prompt);
 
       if (alarm != null) {
-        await _alarmService.setAlarm(alarm: alarm);
+        await AlarmService.setAlarm(alarm: alarm);
 
         final reply =
             "Okay. Your alarm has been set for ${alarm.dateTime.hour}:${alarm.dateTime.minute.toString().padLeft(2, '0')} for ${alarm.task}.";
@@ -178,22 +205,20 @@ class _HomeScreenState extends State<HomeScreen>
         if (mounted) {
           setState(() {
             _text = reply;
+
+            _messages.add(
+              ChatMessage(
+                message: reply,
+                isUser: false,
+              ),
+            );
+            _scrollToBottom();
           });
         }
-
         await _speak(reply);
-
         _isProcessing = false;
-
         return;
       }
-    }
-
-    // ---------- Gemini ----------
-    if (mounted) {
-      setState(() {
-        _text = "Thinking...";
-      });
     }
 
     try {
@@ -202,10 +227,27 @@ class _HomeScreenState extends State<HomeScreen>
       if (mounted) {
         setState(() {
           _text = response;
+
+          _messages.add(
+            ChatMessage(
+              message: response,
+              isUser: false,
+            ),
+          );
+          _scrollToBottom();
         });
       }
 
       await _speak(_sanitizeForSpeech(response));
+    } catch (e, stackTrace) {
+      debugPrint("API ERROR: $e");
+      debugPrint(stackTrace.toString());
+
+      if (mounted) {
+        setState(() {
+          _text = "Error: $e";
+        });
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -214,7 +256,6 @@ class _HomeScreenState extends State<HomeScreen>
       }
     }
   }
-
 
   Future<void> _initPassiveListening() async {
     final hasPermission = await _speechService.requestMicPermission();
@@ -238,7 +279,7 @@ class _HomeScreenState extends State<HomeScreen>
             setState(() => _isPassiveListening = false);
             if (!_isListening && !_isProcessing && !_isSpeaking) {
               Future.delayed(const Duration(milliseconds: 1000),
-                  () => _startPassiveListening());
+                      () => _startPassiveListening());
             }
           }
         }
@@ -396,7 +437,9 @@ class _HomeScreenState extends State<HomeScreen>
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
+    final size = MediaQuery
+        .of(context)
+        .size;
     const Color bgSpaceDark = Color(0xFF0D0C12);
     const Color gradientTop = Color(0xFF220F35);
     const Color glowPink = Color(0xFFFF1E7C);
@@ -435,7 +478,7 @@ class _HomeScreenState extends State<HomeScreen>
           SafeArea(
             child: Padding(
               padding:
-                  const EdgeInsets.symmetric(horizontal: 24.0, vertical: 12.0),
+              const EdgeInsets.symmetric(horizontal: 24.0, vertical: 12.0),
               child: Column(
                 children: [
                   Row(
@@ -494,29 +537,50 @@ class _HomeScreenState extends State<HomeScreen>
                                         rotation: rotationFactor,
                                         voiceEnergy: _smoothSoundLevel,
                                         isListening:
-                                            _isListening || _isSpeaking || _isPassiveListening,
+                                        _isListening || _isSpeaking ||
+                                            _isPassiveListening,
                                       ),
                                     );
                                   },
                                 ),
-                                const SizedBox(height: 50.0),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 20.0),
-                                  child: Text(
-                                    _text,
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      fontSize: 19.0,
-                                      fontWeight: _isListening
-                                          ? FontWeight.w600
-                                          : FontWeight.w400,
-                                      color: _isListening
-                                          ? Colors.white
-                                          : Colors.white.withValues(alpha: 0.7),
-                                      height: 1.5,
-                                      letterSpacing: 0.2,
-                                    ),
+                                 SizedBox(
+                                  height: 220,
+                                  child: ListView.builder(
+                                    controller: _chatController,
+                                    reverse: false,
+                                    itemCount: _messages.length,
+                                    itemBuilder: (context, index) {
+                                      final msg = _messages[index];
+
+                                      return Align(
+                                        alignment:
+                                        msg.isUser ? Alignment.centerRight : Alignment.centerLeft,
+                                        child: Container(
+                                          margin: const EdgeInsets.symmetric(
+                                            horizontal: 16,
+                                            vertical: 6,
+                                          ),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 14,
+                                            vertical: 10,
+                                          ),
+                                          constraints: const BoxConstraints(maxWidth: 280),
+                                          decoration: BoxDecoration(
+                                            color: msg.isUser
+                                                ? const Color(0xFF7B2FF7)
+                                                : const Color(0xFF232323),
+                                            borderRadius: BorderRadius.circular(18),
+                                          ),
+                                          child: Text(
+                                            msg.message,
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 15,
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    },
                                   ),
                                 ),
                               ],

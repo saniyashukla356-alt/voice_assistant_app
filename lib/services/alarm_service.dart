@@ -17,8 +17,7 @@ class AlarmService {
     await saveAlarm(alarm);
 
     final settings = AlarmSettings(
-      id: alarm.id,
-      dateTime: alarm.dateTime,
+      id: DateTime.now().microsecondsSinceEpoch.remainder(2147483647),      dateTime: alarm.dateTime,
       assetAudioPath: 'assets/alarm.mp3',
       loopAudio: true,
       vibrate: true,
@@ -44,17 +43,29 @@ class AlarmService {
   }
 
   static Future<void> snoozeAlarm(int id) async {
-    final alarm = await Alarm.getAlarm(id);
+    final alarm = await getAlarm(id);
     if (alarm == null) return;
 
-    final newSettings = alarm.copyWith(
+    final newSettings = AlarmSettings(
+      id: alarm.id,
       dateTime: DateTime.now().add(const Duration(minutes: 5)),
+      assetAudioPath: 'assets/alarm.mp3',
+      loopAudio: true,
+      vibrate: true,
+      warningNotificationOnKill: true,
+      androidFullScreenIntent: true,
+      volumeSettings: VolumeSettings.fade(
+        volume: 0.8,
+        fadeDuration: const Duration(seconds: 3),
+      ),
+      notificationSettings: const NotificationSettings(
+        title: 'Vaani Reminder',
+        body: 'Tap to open Vaani',
+      ),
     );
 
     await Alarm.set(alarmSettings: newSettings);
   }
-
-  // --- Persistence Methods ---
 
   static Future<void> saveReminder(int id, String reminder) async {
     final prefs = await SharedPreferences.getInstance();

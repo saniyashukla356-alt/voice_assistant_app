@@ -19,7 +19,6 @@ class _LoginPageState extends State<LoginPage> {
     const Color bg = Color(0xFF0D0C12);
     const Color topPurple = Color(0xFF220F35);
     const Color pink = Color(0xFFFF1E7C);
-    const Color violet = Color(0xFF9C27FF);
 
     return Scaffold(
       backgroundColor: bg,
@@ -52,7 +51,7 @@ class _LoginPageState extends State<LoginPage> {
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
                   colors: [
-                    pink.withOpacity(.35),
+                    pink.withValues(alpha: 0.35),
                     Colors.transparent,
                   ],
                 ),
@@ -83,7 +82,7 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFFFF1E7C).withOpacity(0.45),
+                            color: const Color(0xFFFF1E7C).withValues(alpha: 0.45),
                             blurRadius: 35,
                             spreadRadius: 4,
                           ),
@@ -102,7 +101,7 @@ class _LoginPageState extends State<LoginPage> {
                             left: 28,
                             child: Icon(
                               Icons.star,
-                              color: Colors.white.withOpacity(0.8),
+                              color: Colors.white.withValues(alpha: 0.8),
                               size: 14,
                             ),
                           ),
@@ -111,7 +110,7 @@ class _LoginPageState extends State<LoginPage> {
                             bottom: 32,
                             child: Icon(
                               Icons.star,
-                              color: Colors.white.withOpacity(0.7),
+                              color: Colors.white.withValues(alpha: 0.7),
                               size: 10,
                             ),
                           ),
@@ -134,7 +133,7 @@ class _LoginPageState extends State<LoginPage> {
                     Text(
                       "Your Voice First AI Assistant",
                       style: TextStyle(
-                        color: Colors.white.withOpacity(.7),
+                        color: Colors.white.withValues(alpha: 0.7),
                         fontSize: 16,
                       ),
                     ),
@@ -148,15 +147,15 @@ class _LoginPageState extends State<LoginPage> {
                       decoration: InputDecoration(
                         hintText: "Email",
                         hintStyle:
-                        TextStyle(color: Colors.white.withOpacity(.5)),
+                        TextStyle(color: Colors.white.withValues(alpha: 0.5)),
                         prefixIcon:
                         const Icon(Icons.email, color: Colors.white70),
                         filled: true,
-                        fillColor: Colors.white.withOpacity(.08),
+                        fillColor: Colors.white.withValues(alpha: 0.08),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(18),
                           borderSide:
-                          BorderSide(color: Colors.white.withOpacity(.08)),
+                          BorderSide(color: Colors.white.withValues(alpha: 0.08)),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(18),
@@ -176,7 +175,7 @@ class _LoginPageState extends State<LoginPage> {
                       decoration: InputDecoration(
                         hintText: "Password",
                         hintStyle:
-                        TextStyle(color: Colors.white.withOpacity(.5)),
+                        TextStyle(color: Colors.white.withValues(alpha: 0.5)),
                         prefixIcon:
                         const Icon(Icons.lock, color: Colors.white70),
                         suffixIcon: IconButton(
@@ -193,11 +192,11 @@ class _LoginPageState extends State<LoginPage> {
                           },
                         ),
                         filled: true,
-                        fillColor: Colors.white.withOpacity(.08),
+                        fillColor: Colors.white.withValues(alpha: 0.08),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(18),
                           borderSide:
-                          BorderSide(color: Colors.white.withOpacity(.08)),
+                          BorderSide(color: Colors.white.withValues(alpha: 0.08)),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(18),
@@ -263,7 +262,7 @@ class _LoginPageState extends State<LoginPage> {
                         Text(
                           "Don't have an account?",
                           style: TextStyle(
-                              color: Colors.white.withOpacity(.6)),
+                              color: Colors.white.withValues(alpha: 0.6)),
                         ),
                         TextButton(
                           onPressed: () {},

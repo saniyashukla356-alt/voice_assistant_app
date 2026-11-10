@@ -1,5 +1,8 @@
+
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'home_screen.dart';
+import 'signup_screen.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -13,34 +16,94 @@ class _LoginPageState extends State<LoginPage> {
   final passwordController = TextEditingController();
 
   bool obscure = true;
+  bool isLoading = false;
+
+  static const Color bg = Color(0xFF0D0C12);
+  static const Color topPurple = Color(0xFF220F35);
+  static const Color pink = Color(0xFFFF1E7C);
+
+  @override
+  void dispose() {
+    emailController.dispose();
+    passwordController.dispose();
+    super.dispose();
+  }
+
+  void showMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  Future<void> login() async {
+    final email = emailController.text.trim();
+    final password = passwordController.text;
+
+    if (email.isEmpty || password.isEmpty) {
+      showMessage('Please enter email and password.');
+      return;
+    }
+
+    setState(() => isLoading = true);
+
+    try {
+      final response = await Supabase.instance.client.auth.signInWithPassword(
+        email: email,
+        password: password,
+      );
+
+      if (!mounted) return;
+
+      if (response.user != null) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const HomeScreen()),
+        );
+      }
+    } on AuthException catch (e) {
+      showMessage(e.message);
+    } catch (e) {
+      showMessage('Login failed. Please try again.');
+    } finally {
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
+    }
+  }
+
+  Future<void> forgotPassword() async {
+    final email = emailController.text.trim();
+
+    if (email.isEmpty) {
+      showMessage('Please enter your email first.');
+      return;
+    }
+
+    try {
+      await Supabase.instance.client.auth.resetPasswordForEmail(email);
+      showMessage('Password reset link sent to your email.');
+    } on AuthException catch (e) {
+      showMessage(e.message);
+    } catch (e) {
+      showMessage('Unable to send reset email.');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    const Color bg = Color(0xFF0D0C12);
-    const Color topPurple = Color(0xFF220F35);
-    const Color pink = Color(0xFFFF1E7C);
-
     return Scaffold(
       backgroundColor: bg,
       body: Stack(
         children: [
-
-          /// Background Gradient
           Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [
-                  topPurple,
-                  bg,
-                  bg,
-                ],
+                colors: [topPurple, bg, bg],
               ),
             ),
           ),
-
-          /// Pink Glow
           Positioned(
             top: -120,
             right: -70,
@@ -50,23 +113,17 @@ class _LoginPageState extends State<LoginPage> {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
-                  colors: [
-                    pink.withValues(alpha: 0.35),
-                    Colors.transparent,
-                  ],
+                  colors: [pink.withValues(alpha: 0.35), Colors.transparent],
                 ),
               ),
             ),
           ),
-
           SafeArea(
             child: Center(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(horizontal: 28),
                 child: Column(
                   children: [
-
-                    /// Logo
                     Container(
                       width: 130,
                       height: 130,
@@ -75,153 +132,106 @@ class _LoginPageState extends State<LoginPage> {
                         gradient: const LinearGradient(
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
-                          colors: [
-                            Color(0xFFFF1E7C),
-                            Color(0xFF8E2DE2),
-                          ],
+                          colors: [pink, Color(0xFF8E2DE2)],
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFFFF1E7C).withValues(alpha: 0.45),
+                            color: pink.withValues(alpha: 0.45),
                             blurRadius: 35,
                             spreadRadius: 4,
                           ),
                         ],
                       ),
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          const Icon(
-                            Icons.auto_awesome,
-                            color: Colors.white,
-                            size: 62,
-                          ),
-                          Positioned(
-                            top: 30,
-                            left: 28,
-                            child: Icon(
-                              Icons.star,
-                              color: Colors.white.withValues(alpha: 0.8),
-                              size: 14,
-                            ),
-                          ),
-                          Positioned(
-                            right: 28,
-                            bottom: 32,
-                            child: Icon(
-                              Icons.star,
-                              color: Colors.white.withValues(alpha: 0.7),
-                              size: 10,
-                            ),
-                          ),
-                        ],
+                      child: const Icon(
+                        Icons.auto_awesome,
+                        color: Colors.white,
+                        size: 62,
                       ),
                     ),
                     const SizedBox(height: 25),
-
                     const Text(
-                      "Welcome to Vaani",
+                      'Welcome to Vaani',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 32,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-
                     const SizedBox(height: 8),
-
                     Text(
-                      "Your Voice First AI Assistant",
+                      'Your Voice First AI Assistant',
                       style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.7),
                         fontSize: 16,
                       ),
                     ),
-
                     const SizedBox(height: 45),
-
-                    /// Email
                     TextField(
                       controller: emailController,
+                      keyboardType: TextInputType.emailAddress,
                       style: const TextStyle(color: Colors.white),
                       decoration: InputDecoration(
-                        hintText: "Email",
-                        hintStyle:
-                        TextStyle(color: Colors.white.withValues(alpha: 0.5)),
-                        prefixIcon:
-                        const Icon(Icons.email, color: Colors.white70),
+                        hintText: 'Email',
+                        hintStyle: const TextStyle(color: Colors.white54),
+                        prefixIcon: const Icon(Icons.email, color: Colors.white70),
                         filled: true,
                         fillColor: Colors.white.withValues(alpha: 0.08),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(18),
-                          borderSide:
-                          BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+                          borderSide: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.08),
+                          ),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(18),
-                          borderSide:
-                          const BorderSide(color: pink, width: 2),
+                          borderSide: const BorderSide(color: pink, width: 2),
                         ),
                       ),
                     ),
-
                     const SizedBox(height: 20),
-
-                    /// Password
                     TextField(
                       controller: passwordController,
                       obscureText: obscure,
                       style: const TextStyle(color: Colors.white),
                       decoration: InputDecoration(
-                        hintText: "Password",
-                        hintStyle:
-                        TextStyle(color: Colors.white.withValues(alpha: 0.5)),
-                        prefixIcon:
-                        const Icon(Icons.lock, color: Colors.white70),
+                        hintText: 'Password',
+                        hintStyle: const TextStyle(color: Colors.white54),
+                        prefixIcon: const Icon(Icons.lock, color: Colors.white70),
                         suffixIcon: IconButton(
                           icon: Icon(
-                            obscure
-                                ? Icons.visibility
-                                : Icons.visibility_off,
+                            obscure ? Icons.visibility : Icons.visibility_off,
                             color: Colors.white70,
                           ),
                           onPressed: () {
-                            setState(() {
-                              obscure = !obscure;
-                            });
+                            setState(() => obscure = !obscure);
                           },
                         ),
                         filled: true,
                         fillColor: Colors.white.withValues(alpha: 0.08),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(18),
-                          borderSide:
-                          BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+                          borderSide: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.08),
+                          ),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(18),
-                          borderSide:
-                          const BorderSide(color: pink, width: 2),
+                          borderSide: const BorderSide(color: pink, width: 2),
                         ),
                       ),
                     ),
-
                     const SizedBox(height: 18),
-
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton(
-                        onPressed: () {},
+                        onPressed: forgotPassword,
                         child: const Text(
-                          "Forgot Password?",
+                          'Forgot Password?',
                           style: TextStyle(color: Colors.white70),
                         ),
                       ),
                     ),
-
                     const SizedBox(height: 20),
-
-                    /// Login Button
                     SizedBox(
                       width: double.infinity,
                       height: 58,
@@ -234,45 +244,46 @@ class _LoginPageState extends State<LoginPage> {
                             borderRadius: BorderRadius.circular(18),
                           ),
                         ),
-                        onPressed: () {
-                          Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const HomeScreen(),
-                            ),
-                          );
-                        },
-                        child: const Text(
-                          "LOGIN",
-                          style: TextStyle(
-                            fontSize: 18,
-                            letterSpacing: 2,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
+                        onPressed: isLoading ? null : login,
+                        child: isLoading
+                            ? const CircularProgressIndicator(color: Colors.white)
+                            : const Text(
+                                'LOGIN',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  letterSpacing: 2,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
                       ),
                     ),
-
                     const SizedBox(height: 25),
-
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
                           "Don't have an account?",
                           style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.6)),
+                            color: Colors.white.withValues(alpha: 0.6),
+                          ),
                         ),
                         TextButton(
-                          onPressed: () {},
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const SignupScreen(),
+                              ),
+                            );
+                          },
                           child: const Text(
-                            "Sign Up",
+                            'Sign Up',
                             style: TextStyle(color: pink),
                           ),
-                        )
+                        ),
                       ],
-                    )
+                    ),
                   ],
                 ),
               ),

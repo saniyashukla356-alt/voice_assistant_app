@@ -1,6 +1,7 @@
+```dart
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'login_page.dart';
+import 'signup_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -11,7 +12,6 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen>
     with SingleTickerProviderStateMixin {
-
   late AnimationController _controller;
   late Animation<double> _animation;
 
@@ -32,13 +32,15 @@ class _SplashScreenState extends State<SplashScreen>
     _controller.forward();
 
     Timer(const Duration(seconds: 3), () {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => const LoginPage(),
-        ),
-      );
-    });
+  if (!mounted) return;
+
+  Navigator.pushReplacement(
+    context,
+    MaterialPageRoute(
+      builder: (_) => const SignupScreen(),
+    ),
+  );
+});
   }
 
   @override
@@ -49,7 +51,6 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
-
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
@@ -63,18 +64,15 @@ class _SplashScreenState extends State<SplashScreen>
             ],
           ),
         ),
-
         child: Center(
           child: FadeTransition(
             opacity: _animation,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-
                 Container(
                   height: 150,
                   width: 150,
-
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     gradient: RadialGradient(
@@ -89,19 +87,16 @@ class _SplashScreenState extends State<SplashScreen>
                         color: Colors.purpleAccent.withOpacity(.7),
                         blurRadius: 60,
                         spreadRadius: 10,
-                      )
+                      ),
                     ],
                   ),
-
                   child: const Icon(
                     Icons.auto_awesome,
                     size: 70,
                     color: Colors.white,
                   ),
                 ),
-
                 const SizedBox(height: 35),
-
                 const Text(
                   "Vaani AI",
                   style: TextStyle(
@@ -111,9 +106,7 @@ class _SplashScreenState extends State<SplashScreen>
                     letterSpacing: 1.5,
                   ),
                 ),
-
                 const SizedBox(height: 10),
-
                 Text(
                   "Your Intelligent Voice Assistant",
                   style: TextStyle(
@@ -122,9 +115,7 @@ class _SplashScreenState extends State<SplashScreen>
                     letterSpacing: 1,
                   ),
                 ),
-
                 const SizedBox(height: 70),
-
                 const CircularProgressIndicator(
                   strokeWidth: 3,
                   color: Colors.pinkAccent,
@@ -137,3 +128,4 @@ class _SplashScreenState extends State<SplashScreen>
     );
   }
 }
+```

@@ -79,8 +79,12 @@ class _SignupScreenState extends State<SignupScreen> {
       } else {
         showMessage('Account created successfully!');
       }
-
-      Navigator.pop(context);
+Navigator.pushReplacement(
+  context,
+  MaterialPageRoute(
+    builder: (_) => const LoginPage(),
+  ),
+);
     } on AuthException catch (e) {
       showMessage(e.message);
     } catch (e) {
@@ -269,13 +273,21 @@ class _SignupScreenState extends State<SignupScreen> {
                         ),
                         TextButton(
                           onPressed: () {
-  Navigator.pushReplacement(
-    context,
-    MaterialPageRoute(
-      builder: (_) => const LoginPage(),
-    ),
-  );
-},
+                            Navigator.pushReplacement(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const LoginPage(),
+                              ),
+                            );
+                          },
+                          child: const Text(
+                            'LOGIN',
+                            style: TextStyle(
+                              color: pink,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ],

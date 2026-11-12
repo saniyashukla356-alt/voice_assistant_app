@@ -1,4 +1,3 @@
-```dart
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'signup_screen.dart';
@@ -128,4 +127,3 @@ class _SplashScreenState extends State<SplashScreen>
     );
   }
 }
-```
